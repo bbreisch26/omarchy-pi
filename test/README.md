@@ -17,7 +17,7 @@ Three tiers, cheapest first, so a regression is caught as early as possible.
 | `30-patch-series.sh` | Series drift: not on the latest stable tag, tracking `master`, growing past its budget, or patching files an additive drop-in already covers |
 | `40-build-policy.sh` | Scope creep: rebuilding third-party packages, carrying a non-Omarchy PKGBUILD, or reintroducing the Limine/snapper dependencies the Pi cannot use |
 | `50-image-builder.sh` | Bugs that produced unbootable images: `autodetect` stripping the target's drivers, a stale pacman cache silently ignoring rebuilds, the x86 pacman config being restored, creating the user before `/etc/skel` is populated, wrong kernel name per variant |
-| `60-upstream-channel.sh` | Following a pre-release or a branch, and CI publishing something that never booted |
+| `60-upstream-channel.sh` | Following a pre-release or a branch, or reintroducing an unverified image-release workflow |
 
 ## container.d — behavioural checks in an aarch64 container
 
@@ -30,7 +30,7 @@ Three tiers, cheapest first, so a regression is caught as early as possible.
 
 `scripts/smoke-test.sh` boots a built image and asserts it reaches
 `graphical.target` with no failed units, SDDM autologin, and Hyprland running.
-This is the release gate — CI will not publish an image that fails it.
+Run this before sharing an image; CI currently runs only the fast checks.
 
 ## Adding a test
 

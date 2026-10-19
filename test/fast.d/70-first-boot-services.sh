@@ -35,6 +35,8 @@ assert_grep 'nvme\*p\*' "$RF" "handles NVMe device naming"
 
 # The doctor should report expansion from live state too.
 DOC="$ROOT/config/bin/omarchy-pi-doctor"
+assert_grep 'pipewire-audio' "$DOC" "doctor checks Pi audio package installation"
+assert_grep 'pacman -Qq voxtype-bin' "$DOC" "doctor flags the known Pi 4B Voxtype crash"
 if grep -q 'root-expanded' "$DOC" 2>/dev/null; then
   bad "doctor reports expansion from live state" "it checks the removed marker file"
 else

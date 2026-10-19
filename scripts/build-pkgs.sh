@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
-# Build the aarch64 packages Omarchy needs but doesn't publish for ARM.
+# Build the Pi-specific Omarchy package and its bootstrap keyring.
 #
-# Omarchy's own repo (pkgs.omarchy.org) ships x86_64 only, so we rebuild the
-# missing packages from omacom-io/omarchy-pkgs PKGBUILDs and assemble them into
-# a pacman repo the Pi can install from.
+# Desktop dependencies come from Omarchy's official stable aarch64 repo.
 #
-# Runs inside an aarch64 Arch Linux ARM container (native on Apple Silicon).
+# Runs inside an aarch64 Arch Linux ARM container, natively or under emulation.
 set -uo pipefail
 
 PKGBUILD_DIR="${PKGBUILD_DIR:-/pkgbuilds}"
@@ -18,8 +16,7 @@ if [ ${#PACKAGES[@]} -eq 0 ]; then
   echo "No PACKAGES specified" >&2; exit 1
 fi
 
-# Policy: this port rebuilds ONLY packages Omarchy itself publishes, which it
-# publishes for x86_64 only. Without them there is no Omarchy on ARM at all.
+# Policy: this port rebuilds ONLY packages Omarchy itself publishes.
 #
 # It deliberately does NOT rebuild third-party software that lacks an aarch64
 # build. Those builds need local patches (a pinned toolchain, dependencies
@@ -35,7 +32,7 @@ for pkg in "${PACKAGES[@]}"; do
     cat >&2 <<POLICY
 Refusing to build '$pkg': no PKGBUILD in omarchy-pkgs.
 
-This port only rebuilds Omarchy's own packages for aarch64. Third-party
+This port only rebuilds Omarchy's own packages for the Pi. Third-party
 software without an aarch64 build is out of scope -- document it as
 unsupported instead of maintaining a custom build.
 POLICY
@@ -61,14 +58,21 @@ for pkg in "${PACKAGES[@]}"; do
 
   grep -q "aarch64\|'any'" PKGBUILD || patch_arch
 
-  # JOBS=1 serialises compilation. Some Rust packages (herdr) get OOM-killed
-  # while linking under Docker Desktop's default 4 GB; fewer parallel rustc
-  # processes is the difference between building and being killed.
+  if [ "$pkg" = omarchy-keyring ] &&
+     bash -c 'source PKGBUILD; compgen -G "$1/${pkgname}-${pkgver}-${pkgrel}-*.pkg.tar.*" >/dev/null' bash "$OUT"; then
+    echo "    using cached package(s)"
+    ok+=("$pkg")
+    continue
+  fi
+
+  # Keep source builds bounded on emulated hosts.
   if [ -n "${JOBS:-}" ]; then
     export MAKEFLAGS="-j${JOBS}" CARGO_BUILD_JOBS="$JOBS"
   fi
 
-  if makepkg -sf --noconfirm --skippgpcheck >"$LOGS/$pkg.log" 2>&1; then
+  makepkg_args=(-sf --noconfirm --skippgpcheck)
+  [ "$pkg" != omarchy ] || makepkg_args+=(--nodeps)
+  if makepkg "${makepkg_args[@]}" >"$LOGS/$pkg.log" 2>&1; then
     cp ./*.pkg.tar.* "$OUT/" 2>/dev/null && ok+=("$pkg") || failed+=("$pkg:nopkg")
   else
     failed+=("$pkg:build")

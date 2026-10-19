@@ -1,0 +1,6 @@
+# Audio components supplied by Omarchy's ISO-only package path.
+pipewire
+pipewire-audio
+pipewire-alsa
+pipewire-pulse
+wireplumber

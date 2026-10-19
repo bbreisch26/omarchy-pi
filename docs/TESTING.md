@@ -1,17 +1,19 @@
 # Testing the VM image
 
-The VM runs the same aarch64 userspace as the Pi, at native speed on Apple
-Silicon. It validates everything except the Pi's GPU driver and boot firmware.
+The VM runs the same aarch64 userspace as the Pi. It runs natively on Apple
+Silicon or an ARM64 Linux host; x86_64 hosts use emulation. It cannot verify
+the Pi's GPU driver or firmware boot path.
 
 ## Build it
 
-Needs Docker (native arm64 containers) and QEMU:
+Set up the source and packaging checkouts as in the
+[build instructions](../scripts/README.md), then build the VM variant with
+Docker and QEMU installed:
 
 ```bash
-brew install qemu
-git clone https://github.com/omacom-io/omarchy-pkgs.git ../omarchy-pkgs
-git clone -b pi5 https://github.com/vincenth19/omarchy.git ../omarchy
-./scripts/build-all.sh
+export OMARCHY="$PWD/work/src/omarchy"
+export PKGS_REPO="$PWD/work/src/omarchy-pkgs"
+VARIANT=vm ./scripts/build-all.sh
 ```
 
 ## Run it
@@ -34,16 +36,13 @@ ssh -p 2222 omarchy@localhost
 
 | Proven in the VM | Only provable on the Pi |
 |---|---|
-| Every package resolves and installs on aarch64 | V3D GPU driver behaviour |
-| Omarchy's installer runs to completion | Fractional-scaling rendering bugs |
+| Selected desktop packages resolve and install on aarch64 | V3D GPU driver behaviour |
+| Omarchy's installer runs to completion | Pi-specific rendering behaviour |
 | systemd services start cleanly | Pi firmware boot path |
 | Hyprland, SDDM and the shell come up | Thermals and real-world performance |
 
 The VM has no real GPU, so Hyprland runs on software rendering. Do not judge
 animation smoothness there.
 
-## Known limitations
-
-Docker Desktop defaults to a small memory allocation (4 GB). Some Rust packages
-— `herdr` in particular — get OOM-killed while linking. Raise Docker's memory to
-8 GB or more in Docker Desktop → Settings → Resources if you need those built.
+`scripts/smoke-test.sh` runs a headless boot check. It requires KVM on Linux or
+HVF on macOS; x86_64 emulation alone is not sufficient for this test.

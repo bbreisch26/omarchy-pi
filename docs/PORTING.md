@@ -5,14 +5,48 @@
 | # | Phase | Status |
 |---|---|---|
 | 1 | Establish the aarch64 build environment (Docker, native arm64 on Apple Silicon) | done |
-| 2 | Determine package availability and rebuild what upstream ships x86_64-only | done — 23 built, see below |
+| 2 | Determine package availability | done — official stable aarch64 packages now cover the desktop |
 | 3 | Build a bootable VM image and run Omarchy's own installer on ARM | done — 4.0.2, zero failed steps |
 | 3b | Verify the Pi boot chain as far as emulation allows (see below) | done |
 | 4 | Verify on real Pi 5 hardware (V3D GPU, firmware boot, thermals) | **boots to the desktop** — Omarchy 4.0.4 from NVMe on a Pi 5 Rev 1.1: zero failed units, Hyprland on the V3D GPU (no software rendering), HDMI 1920×1080@60, root grown to 469 GB, 49 °C idle. Needed one fix: Plymouth hung boot before `sysinit.target` |
-| 5 | Automated image releases via CI | scaffolded ([workflow](../.github/workflows/build-image.yml)) |
-| 6 | Host an aarch64 pacman repo so installed systems get package updates | not started |
+| 5 | Build and verify flashable images | local build works; automated publication is not configured |
+| 6 | Host an aarch64 pacman repo so installed systems get package updates | superseded for desktop dependencies by the official stable ARM channel; patched `omarchy` still needs a hosted update path |
+
+### Pi 4B compatibility checks
+
+The 4.0.5 image has booted to the desktop on a real Pi 4B in user testing.
+That does not establish application, audio, or GPU compatibility. Track those
+separately before advertising them as supported:
+
+| Feature | Current evidence | Acceptance check |
+|---|---|---|
+| Boot and desktop | Real Pi 4B reaches the desktop | Repeat on a freshly flashed image; check `systemctl --failed` |
+| HDMI audio | The first image omitted `pipewire-audio`, `pipewire-alsa`, and `pipewire-pulse`; installing those three on a Pi 4B and rebooting restored audio (user report). The rebuilt image includes them but is not yet hardware-tested | On a fresh image, confirm `pacman -Q pipewire-audio pipewire-alsa pipewire-pulse wireplumber`, `wpctl status`, and audible browser and `mpv` playback |
+| Voxtype dictation | Pi 4B `systemd-coredump` recorded `SIGILL` in `/usr/lib/voxtype/voxtype-cpu`; the crash instruction was identified as `swpalb` (LSE atomic), unsupported by Cortex-A72. The image does not install it and suppresses the first-run invitation, but the manual installer remains available | Keep the first-run invitation suppressed; if already installed, disable its user service and remove `voxtype-bin` to stop the shell status follower; only offer it after both CPU and ONNX variants start and transcribe on Cortex-A72 hardware |
+| Suspend/resume | The stock `linux-rpi` [recipe](https://github.com/archlinuxarm/PKGBUILDs/blob/master/core/linux-rpi/PKGBUILD) uses Raspberry Pi's [bcm2711 defconfig](https://github.com/raspberrypi/linux/blob/rpi-6.18.y/arch/arm64/configs/bcm2711_defconfig), which has `CONFIG_SUSPEND` disabled; this port does not rebuild the kernel or set suspend policy | Unsupported on Pi 4B until both kernel support and reliable firmware/device wake-up are demonstrated on hardware; screen blanking is not suspend |
+| Documents and graphics | VM tests do not exercise the Pi 4B V3D driver | Open and convert a document, then exercise browser/video rendering on the board |
+
+The patched `omarchy` package is primarily scripts and data. Setting C/C++ or
+Rust flags in this image build would not change Voxtype's separately built
+upstream binaries. Upstream's [CPU](https://github.com/peteonrails/voxtype/blob/dev/Dockerfile.aarch64-cpu)
+and [ONNX](https://github.com/peteonrails/voxtype/blob/dev/Dockerfile.aarch64-onnx)
+ARM Dockerfiles set `RUSTFLAGS="-C target-cpu=neoverse-n1"`; that is not a
+Cortex-A72 baseline despite their Pi 4 comments. A source build with an
+ARMv8-A baseline, plus an audit of native dependencies, still needs a real
+Pi 4B runtime test before inclusion.
 
 ### Package findings (Omarchy 4.0.2)
+
+These are historical findings from before Omarchy published
+`https://pkgs.omarchy.org/stable/aarch64`. Current images use the official ARM
+channel for desktop packages and rebuild only the Pi-patched `omarchy` runtime
+package and bootstrap keyring. The old list below records what the first port
+needed to prove.
+
+The current build skips `kdenlive`: Arch Linux ARM indexed version 26.08.2-1,
+but its recommended mirror and a second official mirror returned 404 for the
+package file on 2026-10-18. The video editor is not needed for boot or the
+desktop; remove the skip in `scripts/build-rootfs.sh` when the mirror serves it.
 
 Of the 148 packages in `install/omarchy-base.packages`, 122 install directly
 from Arch Linux ARM. The rest:
@@ -31,7 +65,7 @@ from Arch Linux ARM. The rest:
 - **`herdr`** builds on ARM but gets OOM-killed while linking under Docker
   Desktop's default 4 GB. Not an architecture problem — it needs more memory.
 
-### How close to a Pi 5 can we get without one?
+### Historical emulation checks before Pi 5 hardware testing
 
 No emulator models the BCM2712: QEMU tops out at `raspi4b` (BCM2711, a
 hardwired Cortex-A72, no PCIe, no GPU), and this QEMU build has no virgl. So
@@ -50,7 +84,7 @@ and the real firmware's `config.txt` handling. Those need the board.
 ### Found and fixed in this port
 
 These were hit while getting Omarchy 4.0.1 to install on aarch64. Each is fixed
-on the [`pi5` branch](https://github.com/vincenth19/omarchy/tree/pi5).
+on the [`pi5` branch](https://github.com/bbreisch26/omarchy/tree/pi5).
 
 | Symptom | Cause | Fix |
 |---|---|---|
@@ -69,17 +103,8 @@ on the [`pi5` branch](https://github.com/vincenth19/omarchy/tree/pi5).
 | A rebuilt package has no effect | pacman installs the stale cached tarball, since a rebuild keeps the same version-release. Evict it from the cache first |
 | Package build killed while linking | Docker Desktop's 4 GB default. Not an ARM issue — raise the memory or build with `JOBS=1` |
 | Script dies mid-run with a syntax error | bash reads scripts incrementally; editing a mounted script while a container runs it corrupts that run. `build-all.sh` snapshots them |
-
-### Expected on real hardware (not yet verified)
-
-| Issue | Mitigation |
-|---|---|
-| Fractional scaling breaks rendering (black waybar) | Integer scaling only — see [config/hypr/monitors.conf](../config/hypr/monitors.conf) |
-| `hyprlock` reported to crash on ARM | Use `hyprlock-git` if it reproduces |
-| Chromium unstable on ARM | Brave or Firefox |
-
-Re-verify the third group against current Omarchy and Mesa before carrying the
-workaround forward — some may already be fixed upstream.
+| UFW setup cannot determine the iptables version in Docker | Enable the default-deny firewall offline and apply Omarchy's rules on boot |
+| Image assembly runs out of Docker overlay space | Extract the rootfs and format temporary images under the mounted `work/` directory |
 
 ## Keeping upstream updates safe
 
@@ -90,14 +115,14 @@ three tiers of patching and the release gate — is in
 ## Update workflow
 
 **Omarchy 4 ships itself as pacman packages, not a git checkout.** The `omarchy`
-package installs to `/usr/share/omarchy`, and `omarchy-update` upgrades it from
-`pkgs.omarchy.org` — which publishes x86_64 only. So tracking upstream means
-rebuilding packages, not pulling a repo.
+package installs to `/usr/share/omarchy`. The official stable ARM repository
+now supplies most packages. This port rebuilds the patched `omarchy` runtime
+against the matching stable source tag.
 
 Two pieces:
 
 **1. Source patches** live on the `pi5` branch of our
-[omarchy fork](https://github.com/vincenth19/omarchy), based on the upstream
+[omarchy fork](https://github.com/bbreisch26/omarchy), based on the upstream
 stable tag. On each upstream release:
 
 ```
@@ -106,21 +131,22 @@ git rebase v<new-tag> pi5
 git push --force-with-lease origin pi5
 ```
 
-**2. Packages** are rebuilt from that branch for aarch64 and published to our
-own repo. The upstream PKGBUILD supports `OMARCHY_SRC=/path/to/checkout`, so we
-build the patched tree directly rather than maintaining a source fork of the
-packaging.
+**2. Packages**: build the patched `omarchy` runtime from that branch and place
+it ahead of the official ARM channel in pacman. The upstream PKGBUILD supports
+`OMARCHY_SRC=/path/to/checkout`, so the matching recipe can build our patched
+tree directly. The bootstrap keyring is also built locally.
 
 Our `omarchy` PKGBUILD ([pkgbuilds/omarchy](../pkgbuilds/omarchy/PKGBUILD))
 drops the `limine` / `limine-mkinitcpio-hook` / `limine-snapper-sync` / `snapper`
 hard dependencies. Those assume PC-style UEFI boot and a btrfs root; the Pi
 boots from its own firmware off the FAT partition.
 
-Users then update normally — pacman pulls from our aarch64 repo instead of
-upstream's x86_64 one. That is what makes this painless for people who are not
-maintaining the port.
+The image currently includes a file-backed local repository for the patched
+runtime. Official ARM desktop dependencies update normally. A hosted update
+path for the patched runtime remains necessary before claiming unattended
+Omarchy runtime updates.
 
 ## Non-goals
 
-- Supporting Pi 4 or other SBCs (until Pi 5 works well)
+- Supporting other SBCs; Pi 4B support is experimental pending hardware testing
 - Diverging from upstream behavior beyond what ARM/Pi strictly requires

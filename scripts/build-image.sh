@@ -3,15 +3,21 @@
 #
 # Deliberately avoids loop devices and mounting so it runs in an unprivileged
 # container: ext4 is populated with `mke2fs -d`, the ESP with mtools, and the
-# partitions are dd'd into a GPT disk at fixed offsets.
+# partitions are dd'd into a disk at fixed offsets.
 set -euo pipefail
 
 ROOTFS="${ROOTFS:-/rootfs}"
 OUT="${OUT:-/out/omarchy-pi.img}"
 VARIANT="${VARIANT:-vm}"
+PARTITION_TABLE="${PARTITION_TABLE:-gpt}"
 ROOT_MB="${ROOT_MB:-auto}"
 ESP_MB="${ESP_MB:-512}"
 ESP_START_MB=1
+case "$PARTITION_TABLE" in
+  gpt) ;;
+  dos) [ "$VARIANT" != "vm" ] || { echo "VM images require GPT" >&2; exit 1; } ;;
+  *) echo "Unsupported partition table: $PARTITION_TABLE" >&2; exit 1 ;;
+esac
 
 # Give the root partition a known PARTUUID so the kernel can find it without
 # depending on a device node. The Pi 5 boots from SD, NVMe or USB and each
@@ -19,7 +25,16 @@ ESP_START_MB=1
 # resolved by the kernel itself, before any initramfs runs, so one image works
 # on all of them. Must be settled before the ESP is written, since both the
 # systemd-boot entry and cmdline.txt embed it.
-ROOT_PARTUUID="${ROOT_PARTUUID:-$(uuidgen | tr 'A-Z' 'a-z')}"
+if [ "$PARTITION_TABLE" = "gpt" ]; then
+  ROOT_PARTUUID="${ROOT_PARTUUID:-$(uuidgen | tr 'A-Z' 'a-z')}"
+else
+  ROOT_PARTUUID="${ROOT_PARTUUID:-$(uuidgen | cut -d- -f1 | tr 'A-Z' 'a-z')-02}"
+  [[ "$ROOT_PARTUUID" =~ ^[0-9a-fA-F]{8}-02$ ]] || {
+    echo "Pi PARTUUID must be an MBR disk ID followed by -02: $ROOT_PARTUUID" >&2
+    exit 1
+  }
+  DISK_ID="${ROOT_PARTUUID%-02}"
+fi
 
 # Size the root partition from the actual rootfs plus headroom, so the image
 # is neither truncated nor needlessly huge to download.
@@ -30,7 +45,9 @@ if [ "$ROOT_MB" = "auto" ]; then
 fi
 
 echo "==> Building ESP (${ESP_MB}M)"
-ESP=/tmp/esp.img
+BUILD_TMP=$(mktemp -d "$(dirname "$OUT")/.omarchy-pi.XXXXXXXX")
+trap 'rm -rf "$BUILD_TMP"' EXIT
+ESP="$BUILD_TMP/esp.img"
 dd if=/dev/zero of="$ESP" bs=1M count="$ESP_MB" status=none
 mkfs.vfat -F32 -n OMARCHYPI "$ESP" >/dev/null
 
@@ -90,26 +107,43 @@ else
   fi
 fi
 
+echo "==> Checking boot FAT"
+repair_status=0
+fsck.vfat -a "$ESP" >/dev/null || repair_status=$?
+if (( repair_status > 1 )); then
+  echo "Could not repair boot FAT (fsck.vfat exit $repair_status)" >&2
+  exit "$repair_status"
+fi
+fsck.vfat -n "$ESP" >/dev/null
+
 echo "==> Building ext4 root (${ROOT_MB}M)"
-ROOT=/tmp/root.img
+ROOT="$BUILD_TMP/root.img"
 mke2fs -q -t ext4 -L omarchy-root -d "$ROOTFS" "$ROOT" "${ROOT_MB}M"
 
-echo "==> Assembling GPT disk"
+echo "==> Assembling disk"
 TOTAL_MB=$(( ESP_START_MB + ESP_MB + ROOT_MB + 2 ))
 rm -f "$OUT"
 truncate -s "${TOTAL_MB}M" "$OUT"
-sfdisk --quiet --label gpt "$OUT" <<EOF
+if [ "$PARTITION_TABLE" = "gpt" ]; then
+  sfdisk --quiet --label gpt "$OUT" <<EOF
 ${ESP_START_MB}MiB,${ESP_MB}MiB,U,*
 ,,L
 EOF
-# sfdisk will not accept a named uuid= field mixed into a positional line
-# (it rejects the script with "unsupported command"), so set the UUID as a
-# second step -- and then read it back. The boot entry above already embeds
-# this value; a table without it is an image that cannot find its root.
-sfdisk --quiet --part-uuid "$OUT" 2 "$ROOT_PARTUUID"
-if ! sfdisk -d "$OUT" | grep -qi "uuid=${ROOT_PARTUUID}"; then
-  echo "root PARTUUID ${ROOT_PARTUUID} was not applied to partition 2" >&2
-  exit 1
+  sfdisk --quiet --part-uuid "$OUT" 2 "$ROOT_PARTUUID"
+  if ! sfdisk -d "$OUT" | grep -qi "uuid=${ROOT_PARTUUID}"; then
+    echo "root PARTUUID ${ROOT_PARTUUID} was not applied to partition 2" >&2
+    exit 1
+  fi
+else
+  sfdisk --quiet --label dos "$OUT" <<EOF
+${ESP_START_MB}MiB,${ESP_MB}MiB,c,*
+,,83
+EOF
+  sfdisk --quiet --disk-id "$OUT" "0x${DISK_ID}"
+  if ! sfdisk -d "$OUT" | grep -qi "label-id: 0x${DISK_ID}"; then
+    echo "MBR disk ID ${DISK_ID} was not applied" >&2
+    exit 1
+  fi
 fi
 echo "    root PARTUUID: $ROOT_PARTUUID (verified in table)"
 dd if="$ESP"  of="$OUT" bs=1M seek="$ESP_START_MB" conv=notrunc status=none

@@ -19,14 +19,8 @@ fi
 # A conflict must stop the release, not be worked around.
 assert_grep 'REBASE CONFLICT' "$SYNC" "a rebase conflict halts with an explanation"
 
-# CI must not publish anything that has not booted.
-WF="$ROOT/.github/workflows/build-image.yml"
-if [ -f "$WF" ]; then
-  gate=$(grep -n 'smoke-test.sh' "$WF" | head -1 | cut -d: -f1)
-  rel=$(grep -n 'action-gh-release' "$WF" | head -1 | cut -d: -f1)
-  if [ -n "$gate" ] && [ -n "$rel" ] && [ "$gate" -lt "$rel" ]; then
-    ok "CI smoke-tests before publishing a release"
-  else
-    bad "CI smoke-tests before publishing a release" "the gate must precede the release step"
-  fi
-fi
+# CI checks the port but does not build or publish images.
+WF="$ROOT/.github/workflows/checks.yml"
+assert_file "$WF"
+assert_grep './test/run.sh fast' "$WF" "CI runs fast checks"
+assert_no_grep 'build-all\.sh|action-gh-release|gh release' "$WF" "CI does not publish an unverified image"

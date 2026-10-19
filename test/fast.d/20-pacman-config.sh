@@ -17,18 +17,17 @@ assert_grep '^SigLevel *=.*DatabaseOptional' "$CONF" "DatabaseOptional set (ALAR
 # multilib is x86-only and has no ARM counterpart; its presence breaks sync.
 assert_no_grep '^\[multilib\]' "$CONF" "no [multilib] section"
 
-# omarchy and omarchy-settings are arch=any. If an upstream x86_64 repo were
-# configured, pacman could satisfy them from there and replace our builds.
-assert_no_grep_active 'pkgs\.omarchy\.org|stable-mirror\.omarchy\.org' "$CONF" \
+# Reject x86_64 and legacy endpoints while allowing the official ARM channel.
+assert_no_grep_active 'stable-mirror\.omarchy\.org|pkgs\.omarchy\.org/(x86_64|\$arch)' "$CONF" \
   "no upstream x86_64 Omarchy repo configured"
 
-# Our repo must be the only Omarchy-ish repo, and must exist.
+# Our patched packages must take precedence over the official ARM channel.
 assert_grep '^\[omarchy-pi\]' "$CONF" "our [omarchy-pi] repo is present"
-if grep -qE '^\[omarchy\]' "$CONF"; then
-  bad "upstream [omarchy] repo section absent" "it would satisfy arch=any packages from x86 builds"
-else
-  ok "upstream [omarchy] repo section absent"
-fi
+assert_grep_active '^Server = https://pkgs\.omarchy\.org/stable/\$arch$' "$CONF" "official stable aarch64 packages are available"
+local_line=$(grep -n '^\[omarchy-pi\]' "$CONF" | cut -d: -f1)
+official_line=$(grep -n '^\[omarchy\]' "$CONF" | cut -d: -f1)
+[ "$local_line" -lt "$official_line" ]
+assert $? "local Pi packages take precedence over official packages"
 
 assert_grep '^\[alarm\]' "$CONF" "Arch Linux ARM [alarm] repo present"
 assert_grep 'mirror\.archlinuxarm\.org' "$MIRROR" "mirrorlist points at Arch Linux ARM"

@@ -16,9 +16,9 @@
 # The Pi boots via its own firmware from a FAT partition with an ext4 root,
 # so limine-mkinitcpio-hook fails outright and snapper has nothing to snapshot.
 pkgname='omarchy'
-_tag='v4.0.4'
-_commit='c668141e9c42b13c80c9ca4ea108e11708c5e8a5'
-pkgver=4.0.4
+_tag='v4.0.5'
+_commit='94a8fbc2d67eec5673c7f16b8c5e8a9c8452ffdc'
+pkgver=4.0.5
 pkgrel=1
 pkgdesc='Beautiful, modern, and opinionated Arch Linux by DHH'
 # The payload is architecture-independent, but the dependency set is not: the
@@ -34,6 +34,8 @@ provides=('omarchy')
 depends=(
   # Omarchy meta
   'omarchy-keyring'
+  # The theme intro videos ship on their own, so this package stays small.
+  'omarchy-themes-intros'
   # Exact-version pin: omarchy-settings-dev `provides=omarchy-settings`
   # (unversioned), and an unversioned dependency here would let the dev
   # package satisfy it, leaving a mixed dev/stable install. A versioned
@@ -79,10 +81,10 @@ depends_x86_64=(
 
 # Apple Silicon boots through m1n1 + GRUB from the Asahi packages and keeps
 # Arch Linux ARM's kernel and boot layout, so the Limine/Snapper stack does not
-# apply. Wi-Fi on the Broadcom parts only scans reliably through the iwd
-# backend, which install/hardware/network.sh selects on Apple Silicon.
+# apply. Only Apple Silicon's Broadcom Wi-Fi needs iwd, and omarchy-mac depends
+# on it. Elsewhere the package only renames the Wi-Fi interface to wlan0
+# (80-iwd.link), and a saved connection tied to the old name stops connecting.
 depends_aarch64=(
-  'iwd'
   'networkmanager'
 )
 
@@ -97,7 +99,7 @@ if [[ -n "${OMARCHY_SRC:-}" ]]; then
   sha256sums=()
 else
   source=("omarchy::git+https://github.com/basecamp/omarchy.git#commit=${_commit}")
-  sha256sums=('8371b148aa06e9d0627c9e11668ef2dfdf54c4a9e5ffbee5aee08c3945073618')
+  sha256sums=('ce413d3fb5b90fab5b2e5cec66552a0562bc1fa3503e3b02e6c067c9a7a7a687')
 fi
 
 prepare() {
@@ -144,6 +146,9 @@ package() {
 
   # Theme bundles for theme switching.
   cp -a themes "$pkgdir/usr/share/omarchy/"
+  # Their intro videos ship from omarchy-themes-intros, into these same
+  # directories, so they are not downloaded again with every rebuild.
+  rm -rf "$pkgdir"/usr/share/omarchy/themes/*/backgrounds/intros
 
   # Versioned migrations runner reads from this tree.
   cp -a migrations "$pkgdir/usr/share/omarchy/"

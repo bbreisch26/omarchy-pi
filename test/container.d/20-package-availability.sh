@@ -8,7 +8,18 @@ OMARCHY="${OMARCHY:-$ROOT/../omarchy}"
 [ -d "$OMARCHY" ] || { echo "    skipped: no omarchy checkout"; exit 0; }
 
 out=$(docker run --rm --platform linux/arm64 \
-  -v "$OMARCHY:/omarchy:ro" -v "$ROOT/packages:/pkglist:ro" alarm-work bash -c '
+  -v "$OMARCHY:/omarchy:ro" -v "$ROOT/packages:/pkglist:ro" \
+  -v "$ROOT/config/packages:/pi-desktop:ro" \
+  -v "$ROOT/config/pacman:/port-config:ro" -v "$ROOT/work/out:/pkgs:ro" alarm-work bash -c '
+pacman-key --init >/dev/null 2>&1
+pacman -U --noconfirm /pkgs/omarchy-keyring-*.pkg.tar.* >/dev/null 2>&1
+pacman-key --populate omarchy >/dev/null 2>&1
+cp /port-config/pacman-pi.conf /etc/pacman.conf
+cp /port-config/mirrorlist-pi /etc/pacman.d/mirrorlist
+sed -i "0,/^\[options\]/s//[options]\\nDisableSandbox/" /etc/pacman.conf
+mkdir -p /var/cache/omarchy-pi/repo
+cp /pkgs/*.pkg.tar.* /var/cache/omarchy-pi/repo/
+( cd /var/cache/omarchy-pi/repo && repo-add -q omarchy-pi.db.tar.gz ./*.pkg.tar.* )
 pacman -Sy >/dev/null 2>&1
 missing=""
 while read -r p; do
@@ -19,6 +30,11 @@ while read -r p; do
     grep -qx "$p" /pkglist/aarch64-rebuild.txt 2>/dev/null || missing="$missing $p"
   }
 done < <(grep -v "^#" /omarchy/install/omarchy-base.packages | grep -v "^$")
+while read -r p; do
+  [ -z "$p" ] && continue
+  case "$p" in \#*) continue ;; esac
+  pacman -S --print-format "%n" "$p" >/dev/null 2>&1 || missing="$missing $p"
+done < /pi-desktop/pi-desktop.packages
 echo "MISSING:$missing"
 ' 2>/dev/null)
 
@@ -27,9 +43,9 @@ missing=$(echo "$out" | sed -n 's/^MISSING://p' | xargs)
 missing=$(echo " $missing " | sed 's/ herdr / /' | xargs)
 
 if [ -z "$missing" ]; then
-  ok "every base package resolves on aarch64 or is rebuilt by us"
+  ok "base and Pi desktop packages resolve on aarch64 or are rebuilt by us"
 else
-  bad "every base package resolves on aarch64 or is rebuilt by us" \
+  bad "base and Pi desktop packages resolve on aarch64 or are rebuilt by us" \
       "unresolvable:$missing"
 fi
 

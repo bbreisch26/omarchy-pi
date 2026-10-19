@@ -34,7 +34,7 @@ cd "$OMARCHY"
 
 echo "==> Fetching upstream tags"
 git remote get-url upstream >/dev/null 2>&1 || \
-  git remote add upstream https://github.com/basecamp/omarchy.git
+  git remote add upstream https://github.com/omacom/omarchy.git
 git fetch --quiet upstream --tags
 
 # Stable only: exclude anything carrying a pre-release suffix. Omarchy's

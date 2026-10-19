@@ -25,11 +25,13 @@ assert_grep 'mkfs\.vfat .*-n OMARCHYPI' "$BI" "ESP is labelled OMARCHYPI"
 # Root is found by PARTUUID: the kernel resolves it itself, before any
 # initramfs runs, so it works even if the initramfs cannot.
 assert_grep 'ROOT_PARTUUID=' "$BI" "a root PARTUUID is assigned at build time"
-assert_grep 'sfdisk --quiet --part-uuid "\$OUT" 2 "\$ROOT_PARTUUID"' "$BI" "the PARTUUID is set on partition 2"
+assert_grep 'sfdisk --quiet --part-uuid "\$OUT" 2 "\$ROOT_PARTUUID"' "$BI" "VM PARTUUID is set on partition 2"
+assert_grep 'sfdisk --quiet --disk-id "\$OUT" "0x\$\{DISK_ID\}"' "$BI" "Pi MBR disk ID determines the root PARTUUID"
 # The build must read the table back. The first version of this feature put
 # uuid= inline in the sfdisk script, sfdisk rejected the whole script, and the
 # grep-only test above still passed -- the image shipped unpartitioned.
 assert_grep 'sfdisk -d "\$OUT" \| grep -qi "uuid=\$\{ROOT_PARTUUID\}"' "$BI" "the build verifies the PARTUUID landed in the table"
+assert_grep 'sfdisk -d "\$OUT" \| grep -qi "label-id: 0x\$\{DISK_ID\}"' "$BI" "the build verifies the Pi MBR disk ID"
 assert_grep 'root=PARTUUID=' "$BI" "the boot entry references root by PARTUUID"
 
 # cmdline.txt is a template; the build rewrites root= into it.

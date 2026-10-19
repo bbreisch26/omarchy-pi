@@ -1,6 +1,7 @@
 # Application testing
 
-Every app was launched in the built aarch64 image and driven through the real
+These results come from the early 4.0.1 aarch64 VM image, not the current
+4.0.5 Pi 4B build. Every listed app was launched in that image and driven through the
 desktop (QEMU input injection + framebuffer capture), not just checked for a
 running process. "Window" means Hyprland reported a mapped window; "renders"
 means it was confirmed visually in a screenshot.
@@ -66,16 +67,14 @@ package for aarch64:
 - AUR's `ghostty-git` pins `zig<0.16.0`, and Arch Linux ARM ships Zig 0.16.0,
   so `yay` refuses to build it.
 
-This is a packaging gap, not an ARM code problem — Arch's own PKGBUILD declares
-`arch=(x86_64 aarch64 i686)`. It becomes installable the normal Omarchy way as
-soon as an aarch64 build is published, either by Arch Linux ARM or by this
-project's own package repo (phase 6).
+This was a packaging gap, not an ARM code problem — Arch's own PKGBUILD declared
+`arch=(x86_64 aarch64 i686)`. Recheck the current package channels before
+offering Ghostty on the Pi.
 
 The same reasoning applies to any other package missing on ARM: the fix is to
 publish a proper aarch64 build, not to hand-patch a one-off local build.
 
 ## Caveats
 
-This is a VM: no real GPU, so Hyprland runs on software rendering. Application
-*correctness* transfers to the Pi; rendering performance and anything that
-depends on the V3D driver does not.
+This VM has no real GPU. These results do not establish Pi 4B CPU or V3D
+compatibility; test applications on the board before claiming support.

@@ -37,12 +37,12 @@ fi
 
 # Files the adapter design says we must NOT patch, because an additive
 # drop-in covers them and editing them guarantees rebase conflicts.
-FORBIDDEN='^etc/mkinitcpio\.conf\.d/'
+FORBIDDEN='^(etc/mkinitcpio\.conf\.d/|default/pacman/)'
 if git diff --name-only "$BASE..pi5" | grep -Eq "$FORBIDDEN"; then
-  bad "no patches to upstream mkinitcpio drop-ins" \
-      "use config/mkinitcpio/zz-omarchy-pi.conf instead"
+  bad "no patches to upstream mkinitcpio or pacman defaults" \
+      "use additive files in config/mkinitcpio/ or config/pacman/ instead"
 else
-  ok "no patches to upstream mkinitcpio drop-ins"
+  ok "no patches to upstream mkinitcpio or pacman defaults"
 fi
 
 # Every patched file should still exist upstream; if one vanished, the patch is

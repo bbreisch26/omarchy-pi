@@ -38,6 +38,8 @@ fi
 # The kernel is named differently per variant: Image vs kernel8.img.
 assert_grep 'kernel\*\.img' "$BI" "image builder detects the Pi kernel (kernel*.img)"
 assert_grep 'boot/Image' "$BI" "image builder detects the VM kernel (Image)"
+assert_grep_active '^dtoverlay=vc4-kms-v3d$' "$ROOT/config/boot/config.txt" "firmware selects the KMS overlay for Pi 4 and Pi 5"
+assert_no_grep_active '^dtoverlay=vc4-kms-v3d-pi5$' "$ROOT/config/boot/config.txt" "Pi 4 does not load the Pi 5-only graphics overlay"
 
 # A persisted UEFI varstore encodes the old image's partition GUID and drops
 # the VM into the UEFI shell.
@@ -46,6 +48,10 @@ assert_grep 'dd if=/dev/zero of="\$VARS"' "$ROOT/scripts/run-vm.sh" "run-vm recr
 # bash reads scripts incrementally; editing a bind-mounted script mid-run
 # corrupts that run.
 assert_grep 'SNAP=' "$BA" "build-all snapshots scripts before mounting them"
+assert_grep 'tar -xf /work/rootfs.tar -C /work/rootfs' "$BA" "rootfs extraction avoids Docker overlay storage"
+assert_grep 'BUILD_TMP=.*dirname.*OUT' "$BI" "image temporary files use the mounted workspace"
+assert_grep 'fsck.vfat -a "\$ESP"' "$BI" "image builder repairs boot FAT after copying firmware"
+assert_grep 'fsck.vfat -n "\$ESP"' "$BI" "image builder verifies boot FAT after copying firmware"
 
 # Sizing the root partition from a fixed guess either truncates or bloats.
 assert_grep 'ROOT_MB:-auto' "$BI" "root partition is sized from the actual rootfs"
@@ -55,6 +61,13 @@ assert_grep 'omarchy-pi-expand-root' "$RF" "first-boot root expansion is install
 
 # Release images keep Omarchy's closed-by-default firewall.
 assert_grep 'ALLOW_SSH' "$RF" "SSH exposure is explicit and variant-gated"
+assert_grep 'systemctl enable ufw.service' "$RF" "firewall stays enabled when container setup cannot run iptables"
+assert_grep 'pi-desktop.packages' "$RF" "Pi desktop packages are installed explicitly"
+assert_grep 'Failed to install Pi desktop packages after 3 attempts' "$RF" "Pi desktop package downloads retry transient mirror failures"
+for package in pipewire-audio pipewire-alsa pipewire-pulse wireplumber; do
+  assert_grep "^${package}$" "$ROOT/config/packages/pi-desktop.packages" "Pi desktop manifest includes ${package}"
+done
+assert_grep 'voxtype-install-invitation' "$RF" "Pi image suppresses the unverified Voxtype invitation"
 
 # A known default password plus SSH open is a login for anyone on the LAN.
 assert_grep 'PasswordAuthentication no' "$RF" "SSH is key-only when a key is installed"

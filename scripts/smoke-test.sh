@@ -12,7 +12,14 @@ SSH_PORT="${SSH_PORT:-2222}"
 TIMEOUT="${TIMEOUT:-420}"
 KEY="${KEY:-work/id_omarchy}"
 SERIAL="work/smoke-serial.log"
-FW_CODE="${FW_CODE:-/opt/homebrew/share/qemu/edk2-aarch64-code.fd}"
+if [[ $(uname -s) == Linux ]]; then
+  FW_CODE="${FW_CODE:-/usr/share/AAVMF/AAVMF_CODE.fd}"
+  [[ -w /dev/kvm ]] || { echo "KVM access is required for the Linux smoke test" >&2; exit 1; }
+  ACCEL=(-accel kvm -cpu host)
+else
+  FW_CODE="${FW_CODE:-/opt/homebrew/share/qemu/edk2-aarch64-code.fd}"
+  ACCEL=(-accel hvf -cpu host)
+fi
 
 [ -f "$IMG" ] || { echo "No image at $IMG -- run ./scripts/build-all.sh first" >&2; exit 1; }
 [ -f "$KEY" ] || { echo "No smoke-test key at $KEY" >&2; exit 1; }
@@ -24,7 +31,7 @@ dd if=/dev/zero of=work/efi-vars.fd bs=1m count=64 status=none
 
 echo "==> Booting headless"
 qemu-system-aarch64 \
-  -accel hvf -cpu host -machine virt,gic-version=3 -smp 4 -m 4096 \
+  "${ACCEL[@]}" -machine virt,gic-version=3 -smp 4 -m 4096 \
   -drive "if=pflash,format=raw,readonly=on,file=$FW_CODE" \
   -drive "if=pflash,format=raw,file=work/efi-vars.fd" \
   -drive "if=virtio,format=raw,file=$IMG" \
@@ -50,6 +57,21 @@ until run true; do
 done
 echo "    SSH up after $((SECONDS))s"
 
+echo "==> Waiting for graphical session"
+until run "systemctl is-active --quiet graphical.target && systemctl is-active --quiet sddm && pgrep -x Hyprland >/dev/null"; do
+  if ! kill -0 $QEMU_PID 2>/dev/null; then
+    echo "FAIL: QEMU exited before the graphical session started"
+    tail -40 "$SERIAL"
+    exit 1
+  fi
+  if (( SECONDS > deadline )); then
+    echo "FAIL: graphical session did not start within ${TIMEOUT}s"
+    tail -60 "$SERIAL"
+    exit 1
+  fi
+  sleep 5
+done
+
 fails=0
 check() {
   local label=$1 cmd=$2
@@ -63,19 +85,28 @@ check() {
 }
 
 echo "==> System checks"
-check "kernel arch"           "uname -m"
+check "kernel arch"           "uname -m | grep -x aarch64"
 check "omarchy version"       "cat /usr/share/omarchy/version"
 check "session file"          "ls /usr/local/share/wayland-sessions/omarchy.desktop"
-check "sddm enabled"          "systemctl is-enabled sddm"
+check "sddm enabled"          "systemctl is-enabled sddm | grep -x enabled"
+check "sddm active"           "systemctl is-active sddm | grep -x active"
+check "graphical target"      "systemctl is-active graphical.target | grep -x active"
 check "autologin configured"  "grep -h Session= /etc/sddm.conf.d/autologin.conf"
-check "pacman is aarch64"     "grep -c 'Architecture = aarch64' /etc/pacman.conf"
-check "no x86 mirrors"        "grep -qv multilib /etc/pacman.conf && echo clean"
-check "hyprland binary"       "command -v Hyprland"
-check "systemd state"         "systemctl is-system-running || true"
+check "pacman is aarch64"     "grep -q '^Architecture = aarch64$' /etc/pacman.conf && echo aarch64"
+check "no x86 mirrors"        "! grep -Eq '^\\[multilib\\]|x86_64' /etc/pacman.conf && echo clean"
+check "hyprland running"      "pgrep -x Hyprland | head -1"
+check "systemd state"         "systemctl is-system-running | grep -x running"
 
 echo "==> Failed units"
-run "systemctl --failed --no-legend --no-pager" > work/failed-units.txt
-if [ -s work/failed-units.txt ]; then sed 's/^/    /' work/failed-units.txt | head -20; else echo "    none"; fi
+if ! run "systemctl --failed --no-legend --no-pager" > work/failed-units.txt; then
+  echo "    FAIL: could not query failed units"
+  fails=$((fails+1))
+elif [ -s work/failed-units.txt ]; then
+  sed 's/^/    /' work/failed-units.txt | head -20
+  fails=$((fails+1))
+else
+  echo "    none"
+fi
 
 echo "==> Graphical session"
 run "systemctl status sddm --no-pager -n 5" | sed 's/^/    /' | head -12

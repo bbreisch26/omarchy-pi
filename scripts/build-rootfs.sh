@@ -43,12 +43,15 @@ else
   ( cd "$LOCAL_REPO" && tar -czf omarchy-pi.db.tar.gz -T /dev/null && ln -sf omarchy-pi.db.tar.gz omarchy-pi.db )
 fi
 
+pacman-key --init
+pacman -U --noconfirm /pkgs/omarchy-keyring-*.pkg.tar.*
+pacman-key --populate omarchy
 pacman -Syu --noconfirm
 
 echo "==> Installing kernel and base system"
 pacman -S --noconfirm --needed \
   base "$KERNEL" linux-firmware systemd sudo openssh networkmanager \
-  git base-devel vim e2fsprogs util-linux gptfdisk
+  git base-devel vim e2fsprogs util-linux gptfdisk xdg-user-dirs
 
 echo "==> Installing Omarchy packages available for aarch64"
 # Packages upstream lists that have no aarch64 build are handled by
@@ -56,22 +59,61 @@ echo "==> Installing Omarchy packages available for aarch64"
 mapfile -t WANT < <(grep -hv '^#' /omarchy/install/omarchy-base.packages | grep -v '^$')
 AVAIL=(); SKIP=()
 for p in "${WANT[@]}"; do
+  if [ "$p" = kdenlive ]; then
+    SKIP+=("$p")
+    continue
+  fi
   # --print resolves `provides` too, so e.g. `nvim` is satisfied by `neovim`.
   # A plain `pacman -Si` lookup misses those and understates availability.
   if pacman -S --print-format '%n' "$p" >/dev/null 2>&1; then AVAIL+=("$p"); else SKIP+=("$p"); fi
 done
-echo "    installing ${#AVAIL[@]}, unavailable ${#SKIP[@]}: ${SKIP[*]:-none}"
+echo "    installing ${#AVAIL[@]}, skipped ${#SKIP[@]}: ${SKIP[*]:-none}"
 printf '%s\n' "${SKIP[@]}" > /root/unavailable-packages.txt
-pacman -S --noconfirm --needed "${AVAIL[@]}" || echo "WARN: some packages failed"
+for attempt in 1 2 3; do
+  if pacman -S --noconfirm --needed "${AVAIL[@]}"; then
+    break
+  fi
+  if [ "$attempt" -eq 3 ]; then
+    echo "Failed to install available Omarchy packages after 3 attempts" >&2
+    exit 1
+  fi
+  echo "WARN: package install failed; retrying ($attempt/3)"
+  sleep 10
+done
+
+if [ "$VARIANT" = "pi" ]; then
+  echo "==> Installing Pi desktop integration packages"
+  mapfile -t PI_DESKTOP < <(grep -Ev '^[[:space:]]*(#|$)' /config/packages/pi-desktop.packages)
+  ((${#PI_DESKTOP[@]})) || { echo "Pi desktop package manifest is empty" >&2; exit 1; }
+  for attempt in 1 2 3; do
+    if pacman -S --noconfirm --needed "${PI_DESKTOP[@]}"; then
+      break
+    fi
+    if [ "$attempt" -eq 3 ]; then
+      echo "Failed to install Pi desktop packages after 3 attempts" >&2
+      exit 1
+    fi
+    echo "WARN: Pi desktop package install failed; retrying ($attempt/3)"
+    sleep 10
+  done
+fi
 
 echo "==> Installing the omarchy package"
 # Omarchy 4 ships as a pacman package installing to /usr/share/omarchy; it is
 # not a git checkout. Ours comes from the local aarch64 repo built by
-# build-pkgs.sh (upstream publishes x86_64 only).
-if pacman -Si omarchy >/dev/null 2>&1; then
-  pacman -S --noconfirm --needed omarchy || echo "WARN: omarchy package failed to install"
-else
-  echo "WARN: no omarchy package in local repo -- desktop will not be configured"
+# build-pkgs.sh.
+install -Dm644 /config/mkinitcpio/zz-omarchy-pi.conf /etc/mkinitcpio.conf.d/zz-omarchy-pi.conf
+pacman -Si omarchy >/dev/null 2>&1 || { echo "omarchy package missing from local repo" >&2; exit 1; }
+pacman -S --noconfirm --needed omarchy
+
+if [ "$VARIANT" = "pi" ]; then
+  grep -q 'omarchy-done ensure voxtype-install-invitation' \
+    /usr/share/omarchy/install/user/first-run/install-voxtype.hook || {
+      echo "Voxtype invitation hook changed; review the Pi compatibility guard" >&2
+      exit 1
+    }
+  mkdir -p /etc/skel/.local/state/omarchy/done
+  touch /etc/skel/.local/state/omarchy/done/voxtype-install-invitation
 fi
 
 echo "==> Creating user $USERNAME"
@@ -125,6 +167,8 @@ ENVEOF
 fi
 
 echo "==> Running Omarchy system setup"
+install -Dm644 /config/pacman/pacman-pi.conf /usr/share/omarchy/default/pacman/pacman-pi.conf
+install -Dm644 /config/pacman/mirrorlist-pi /usr/share/omarchy/default/pacman/mirrorlist-pi
 # run_logged traps per-script failures instead of aborting, so this completes
 # even where x86-specific steps do not apply; the log is what we grade.
 if command -v omarchy-apply-system >/dev/null 2>&1; then
@@ -138,6 +182,33 @@ if command -v omarchy-apply-system >/dev/null 2>&1; then
   grep "Failed:" /root/omarchy-apply.log || echo "(none)"
 else
   echo "WARN: omarchy-apply-system not found; skipping system setup"
+fi
+
+for svc in cups.service avahi-daemon.service docker.socket systemd-resolved.service \
+  NetworkManager.service power-profiles-daemon.service sddm.service systemd-oomd.service; do
+  systemctl enable "$svc" 2>/dev/null || echo "WARN: could not enable $svc"
+done
+systemctl mask NetworkManager-wait-online.service 2>/dev/null || true
+if [ -f /etc/ufw/ufw.conf ]; then
+  sed -i 's/^ENABLED=.*/ENABLED=yes/' /etc/ufw/ufw.conf
+  systemctl enable ufw.service
+  if grep -q 'Failed:.*firewall.sh' /root/omarchy-apply.log; then
+    cat > /etc/systemd/system/omarchy-pi-firewall.service <<'FIREWALLEOF'
+[Unit]
+Description=Apply Omarchy firewall rules on the Pi
+After=ufw.service
+Requires=ufw.service
+Before=omarchy-pi-allow-ssh.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/bash /usr/share/omarchy/install/config/firewall.sh
+
+[Install]
+WantedBy=multi-user.target
+FIREWALLEOF
+    systemctl enable omarchy-pi-firewall.service
+  fi
 fi
 
 echo "==> Staging the bundled Node.js tarball"
@@ -259,12 +330,6 @@ fi
 echo "==> Installing omarchy-pi-doctor"
 install -Dm755 /config/bin/omarchy-pi-doctor /usr/local/bin/omarchy-pi-doctor
 
-echo "==> Installing the omarchy-pi initramfs drop-in"
-# Additive: sorts after Omarchy's own drop-ins and adjusts the arrays, so an
-# upstream rewrite of their files cannot break us and we never conflict on a
-# file we do not own.
-install -Dm644 /config/mkinitcpio/zz-omarchy-pi.conf /etc/mkinitcpio.conf.d/zz-omarchy-pi.conf
-
 echo "==> Configuring a generic initramfs"
 # mkinitcpio's `autodetect` hook trims modules to the hardware of the machine
 # doing the build. We build in a container, so it would drop exactly the
@@ -308,8 +373,9 @@ echo "==> Generating initramfs"
 if mkinitcpio -P > /tmp/mkinitcpio.log 2>&1; then
   echo "    initramfs built cleanly"
 else
-  echo "WARN: mkinitcpio reported problems:"
+  echo "ERROR: mkinitcpio reported problems:" >&2
   grep -aE '^==> (ERROR|WARNING)|error:' /tmp/mkinitcpio.log | head -20 | sed 's/^/      /'
+  exit 1
 fi
 
 # Omarchy's firewall is "allow nothing in, everything out" (install/config/
@@ -328,7 +394,7 @@ if [ "$ALLOW_SSH" = "1" ]; then
   cat > /etc/systemd/system/omarchy-pi-allow-ssh.service <<'UFWEOF'
 [Unit]
 Description=Allow SSH through the firewall (omarchy-pi)
-After=ufw.service
+After=ufw.service omarchy-pi-firewall.service
 Requires=ufw.service
 
 [Service]

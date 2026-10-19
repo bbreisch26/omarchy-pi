@@ -68,5 +68,5 @@ assert_grep 'btrfs-overlayfs' "$DROPIN" "drop-in handles btrfs-overlayfs"
 assert_no_grep_active '\$\{(HOOKS|MODULES)\[@\]/' "$DROPIN" \
   "drop-in removes entries by rebuilding the array"
 
-# A month-old image fails 6 of 11 package builds on 404s for build deps.
+# Stale package databases can fail dependency downloads.
 assert_grep 'sudo pacman -Syu' "$ROOT/scripts/build-pkgs.sh" "package builds refresh the package database first"

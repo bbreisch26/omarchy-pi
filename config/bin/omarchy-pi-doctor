@@ -32,9 +32,8 @@ else
   ok "no [multilib]"
 fi
 
-# Active directives only -- the shipped config explains in comments why the
-# upstream repo is not used, and that must not read as a failure.
-if grep -vE '^\s*#' /etc/pacman.conf 2>/dev/null | grep -q 'stable-mirror\.omarchy\.org\|pkgs\.omarchy\.org'; then
+# Check active directives and allow the official stable ARM channel.
+if grep -vE '^\s*#' /etc/pacman.conf 2>/dev/null | grep -qE 'stable-mirror\.omarchy\.org|pkgs\.omarchy\.org/(x86_64|\$arch)'; then
   bad "an upstream x86_64 Omarchy repo is configured" \
       "omarchy and omarchy-settings are arch=any, so x86 builds could replace the ARM ones"
 else
@@ -113,6 +112,29 @@ failed=$(systemctl --failed --no-legend --no-pager 2>/dev/null | wc -l)
 (( failed == 0 )) \
   && ok "no failed systemd units" \
   || note "$failed failed unit(s)" "$(systemctl --failed --no-legend --no-pager 2>/dev/null | awk '{print $1}' | tr '\n' ' ')"
+
+if [[ -r /proc/device-tree/model ]] && grep -aq 'Raspberry Pi' /proc/device-tree/model; then
+  echo
+  echo "Audio"
+  missing_audio=()
+  for package in pipewire pipewire-audio pipewire-alsa pipewire-pulse wireplumber; do
+    pacman -Qq "$package" >/dev/null 2>&1 || missing_audio+=("$package")
+  done
+  if (( ${#missing_audio[@]} == 0 )); then
+    ok "Pi audio packages installed"
+  else
+    bad "Pi audio packages missing" "${missing_audio[*]}"
+  fi
+  if command -v wpctl >/dev/null 2>&1 && wpctl status >/dev/null 2>&1; then
+    ok "PipeWire session responds"
+  else
+    note "PipeWire session is not responding" "run this as the desktop user, then inspect systemctl --user status pipewire wireplumber"
+  fi
+
+  if grep -aq 'Raspberry Pi 4' /proc/device-tree/model && pacman -Qq voxtype-bin >/dev/null 2>&1; then
+    note "Voxtype is installed on a Pi 4B" "voxtype-cpu crashes on an unsupported LSE instruction; disable its user service and remove voxtype-bin to stop the shell status follower until a compatible build is tested"
+  fi
+fi
 
 echo
 printf 'passed %d, warnings %d, failures %d\n' "$pass" "$warn" "$fail"

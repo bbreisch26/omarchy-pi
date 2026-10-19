@@ -1,15 +1,15 @@
-# Raspberry Pi 5 firmware boot configuration for Omarchy.
+# Raspberry Pi 4 and 5 firmware boot configuration for Omarchy.
 # The Pi's own firmware reads this off the FAT partition; there is no UEFI
-# and no bootloader, which is why upstream Omarchy's Limine setup is skipped.
+# and no PC-style bootloader, which is why upstream Omarchy's Limine setup is skipped.
 
 [all]
 arm_64bit=1
 kernel=kernel8.img
 initramfs initramfs-linux.img followkernel
 
-# KMS driver for the Pi 5's VideoCore VII. Required for Wayland/Hyprland —
+# KMS driver selected for the board by the firmware's overlay map. Required for Wayland/Hyprland —
 # without it there is no DRM device and the compositor will not start.
-dtoverlay=vc4-kms-v3d-pi5
+dtoverlay=vc4-kms-v3d
 
 max_framebuffers=2
 disable_overscan=1

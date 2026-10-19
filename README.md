@@ -1,12 +1,12 @@
 # omarchy-pi
 
-Run [Omarchy](https://omarchy.org) — full experience, latest stable — on the Raspberry Pi 5.
+Run [Omarchy](https://omarchy.org) on a Raspberry Pi 5, with an experimental Pi 4B image path.
 
-> **Status: alpha.** Omarchy 4.0.2 builds and runs on aarch64 — the full
-> desktop, from Omarchy's own installer, with zero failed install steps.
-> Verified in a native aarch64 VM, on a Cortex-A76 model booting from emulated
-> NVMe, and on QEMU's `raspi4b` as far as the Pi vendor kernel + SD boot chain
-> goes; **not yet tested on real Pi 5 hardware** (V3D GPU, firmware, BCM2712).
+> **Status: alpha.** Omarchy 4.0.4 reached the desktop on a real Pi 5.
+> This repo now targets stable 4.0.5 and uses Omarchy's official aarch64
+> package channel. A 4.0.5 image also reached the desktop on a real Pi 4B;
+> audio worked after installing the three missing PipeWire packages and
+> rebooting. The rebuilt image includes them, pending fresh-card testing.
 > See [docs/PORTING.md](docs/PORTING.md).
 
 ![Omarchy 4.0.1 running on aarch64](docs/images/omarchy-pi-vm.png)
@@ -15,29 +15,28 @@ Run [Omarchy](https://omarchy.org) — full experience, latest stable — on the
 
 ## Goal
 
-A ready-to-flash SD card image (`.img.xz`, flashable with Raspberry Pi Imager) that boots a Pi 5 straight into Omarchy, tracking upstream stable releases with a minimal patch set — not a fork-distro.
+A ready-to-flash SD card image (`.img.xz`, flashable with Raspberry Pi Imager) that boots a Pi 4B or Pi 5 into Omarchy, tracking upstream stable releases with a minimal patch set.
 
 ## How it's structured
 
 | Piece | What it is |
 |---|---|
-| **This repo** | Docs, image build tooling, Pi-specific configs, CI |
-| [`vincenth19/omarchy`](https://github.com/vincenth19/omarchy) (`pi5` branch) | Fork of `basecamp/omarchy`: upstream stable tag + a few Pi/ARM patch commits, rebased on each upstream release |
-| aarch64 packages | [pkgbuilds/](pkgbuilds/) plus rebuilds of 23 packages upstream ships x86_64-only. Currently baked into the image; hosting them as a public repo (so installed systems get updates) is the next milestone |
+| **This repo** | Docs, image build tooling, Pi-specific configs, fast CI checks |
+| [`bbreisch26/omarchy`](https://github.com/bbreisch26/omarchy) (`pi5` branch) | Fork of `omacom/omarchy`: upstream stable tag + a few Pi/ARM patch commits, rebased on each upstream release |
+| aarch64 packages | The [official stable ARM repository](https://pkgs.omarchy.org/stable/aarch64/) supplies desktop packages; [pkgbuilds/](pkgbuilds/) holds the patched runtime recipe |
 
 ## What works today
 
-Run `./scripts/build-all.sh` and you get a bootable aarch64 image with Omarchy
-4.0.2 on it. Automated checks (`./scripts/smoke-test.sh`) confirm on every build:
+Follow [the build instructions](scripts/README.md) to produce a Pi image. The
+4.0.4 image reached the Pi 5 desktop; its VM smoke tests confirmed:
 
 - boots to `graphical.target` with **no failed systemd units**
 - SDDM autologins into the Omarchy session; Hyprland and quickshell run
-- 147 of 148 upstream packages installed (`herdr` is a build-memory issue, not ARM)
-- pacman correctly configured for aarch64, with no x86 mirrors left behind
+- pacman configured for aarch64, with Pi packages ahead of official stable ARM packages
 
-Getting there needed four source patches to Omarchy plus one additive drop-in —
-all genuine ARM/Pi portability bugs, kept as a small series on the `pi5` branch and
-[documented here](docs/PORTING.md#found-and-fixed-in-this-port).
+Getting there needed three source patch commits to Omarchy plus additive build
+configuration — all genuine ARM/Pi portability fixes, kept as a small series on
+the `pi5` branch and [documented here](docs/PORTING.md#found-and-fixed-in-this-port).
 
 ## Approach
 
@@ -49,13 +48,13 @@ all genuine ARM/Pi portability bugs, kept as a small series on the `pi5` branch 
   [the update workflow](docs/PORTING.md#update-workflow)
 - Boot: Pi firmware boot on hardware, systemd-boot in the VM. Omarchy's
   Limine + btrfs-snapshot layer assumes PC-style UEFI and does not apply
-- Images are built in native aarch64 containers on Apple Silicon — no emulation
+- Images build natively on aarch64 or under Docker's ARM emulation on x86_64
 - Prior ARM work that informed this: [ggalancs/omarchy-arm-utm](https://github.com/basecamp/omarchy/discussions/7956)
 
 ## Hardware target
 
-- Raspberry Pi 5, 8 GB (4 GB untested)
-- Official 5V/5A USB-C PSU, active cooler
+- Raspberry Pi 5, 8 GB; Raspberry Pi 4B, 4 GB+ is experimental
+- Board-appropriate official USB-C PSU and cooling
 - 32 GB+ microSD (A2-rated recommended) or NVMe HAT
 
 ## Prior art & credits
