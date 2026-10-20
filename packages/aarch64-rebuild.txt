@@ -1,2 +1,3 @@
 omarchy-keyring
+omarchy-settings
 omarchy

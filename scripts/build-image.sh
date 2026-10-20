@@ -9,7 +9,11 @@ set -euo pipefail
 ROOTFS="${ROOTFS:-/rootfs}"
 OUT="${OUT:-/out/omarchy-pi.img}"
 VARIANT="${VARIANT:-vm}"
-PARTITION_TABLE="${PARTITION_TABLE:-gpt}"
+if [ "$VARIANT" = pi ]; then
+  PARTITION_TABLE="${PARTITION_TABLE:-dos}"
+else
+  PARTITION_TABLE="${PARTITION_TABLE:-gpt}"
+fi
 ROOT_MB="${ROOT_MB:-auto}"
 ESP_MB="${ESP_MB:-512}"
 ESP_START_MB=1

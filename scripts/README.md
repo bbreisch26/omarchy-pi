@@ -37,13 +37,18 @@ overlay storage. On WSL, Windows C: still needs free space for Docker Desktop's
 disk image even when the Linux filesystem reports ample room.
 
 Use `VARIANT=pi` for Raspberry Pi firmware boot, including experimental Pi 4B
-testing. The firmware selects the board's V3D overlay; real Pi 4 desktop
-operation and applications need fresh-card testing. Pi images use GPT by default; set
-`PARTITION_TABLE=dos` only to compare an MBR boot image on hardware that reports
-no bootable GPT partitions. `VARIANT=vm` builds the UEFI VM image used by
-`run-vm.sh` and `smoke-test.sh`.
+testing. The firmware selects the board's V3D overlay; the MBR image has booted
+on a real Pi 4B, while application and GPIO coverage remain in progress.
+Pi images use MBR by default for the tested bootloader path; set
+`PARTITION_TABLE=gpt` only to compare a GPT image. `VARIANT=vm` builds the UEFI
+VM image used by `run-vm.sh` and `smoke-test.sh`.
 The Pi build also installs the audio packages in
-`config/packages/pi-desktop.packages`. It suppresses the optional Voxtype
+`config/packages/pi-desktop.packages` and a pinned package from the
+[`raspi-config` Arch fork](https://github.com/bbreisch26/raspi-config-alarm/tree/arch-trixie).
+Run `sudo raspi-config` on the Pi to toggle SPI, I2C, serial and 1-Wire;
+changes to boot settings require a reboot. The menu is intentionally limited
+to these interfaces until other Raspberry Pi OS actions are ported to Arch.
+The build suppresses the optional Voxtype
 first-run invitation until its prebuilt aarch64 binaries pass Pi 4B tests.
 
 Flash `work/out/omarchy-pi.img` to a 32 GB or larger card with Balena Etcher

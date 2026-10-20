@@ -1,6 +1,7 @@
-# Audio components supplied by Omarchy's ISO-only package path.
+# Pi desktop audio and hardware configuration.
 pipewire
 pipewire-audio
 pipewire-alsa
 pipewire-pulse
 wireplumber
+raspi-config-git

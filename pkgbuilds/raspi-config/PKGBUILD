@@ -1,0 +1,20 @@
+pkgname=raspi-config-git
+pkgver=20261019.r715.b47a420
+pkgrel=1
+pkgdesc='Raspberry Pi hardware interface configuration for Arch Linux ARM'
+arch=('any')
+url='https://github.com/bbreisch26/raspi-config-alarm'
+license=('MIT')
+depends=('libnewt' 'ncurses' 'pacman' 'util-linux')
+makedepends=('git')
+provides=('raspi-config')
+conflicts=('raspi-config')
+_commit=b47a4206214e4a2e1d5d1af300a5cb74bca9ca26
+source=("raspi-config-alarm::git+$url#commit=$_commit")
+sha256sums=('SKIP')
+
+package() {
+  cd "$srcdir/raspi-config-alarm"
+  install -Dm755 raspi-config "$pkgdir/usr/bin/raspi-config"
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

@@ -54,8 +54,21 @@ if [ "${SKIP_PACKAGES:-0}" != 1 ]; then
     -e OMARCHY_SRC=/omarchy -e JOBS="${JOBS:-2}" \
     -e PACKAGES="$(tr '\n' ' ' < "$ROOT/packages/aarch64-rebuild.txt")" \
     alarm-build bash /scripts/build-pkgs.sh
+  if [ "$VARIANT" = pi ]; then
+    docker run --rm --platform linux/arm64 \
+      -v "$ROOT/pkgbuilds/raspi-config:/recipe:ro" \
+      -v "$WORK/out:/out" \
+      alarm-build bash -lc '
+        cp -r /recipe /tmp/raspi-config-pkg
+        cd /tmp/raspi-config-pkg
+        makepkg -f --nodeps --noconfirm
+        cp ./*.pkg.tar.* /out/
+      '
+  fi
 fi
-for package in omarchy omarchy-keyring; do
+required_packages=(omarchy omarchy-keyring omarchy-settings)
+[ "$VARIANT" != pi ] || required_packages+=(raspi-config-git)
+for package in "${required_packages[@]}"; do
   compgen -G "$WORK/out/$package-[0-9]*.pkg.tar.*" >/dev/null || {
     echo "Required package was not built: $package (see $WORK/out/logs)" >&2
     exit 1
@@ -95,7 +108,7 @@ docker run --rm --platform linux/arm64 \
   -v "$WORK:/work" \
   -v omarchy-pi-pacman-cache:/var/cache/pacman/pkg \
   -e VARIANT="$VARIANT" \
-  -e PARTITION_TABLE="${PARTITION_TABLE:-gpt}" \
+  -e PARTITION_TABLE="${PARTITION_TABLE:-}" \
   alarm-work bash -c '
     set -e
     for attempt in 1 2 3; do

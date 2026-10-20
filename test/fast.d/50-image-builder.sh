@@ -67,6 +67,13 @@ assert_grep 'Failed to install Pi desktop packages after 3 attempts' "$RF" "Pi d
 for package in pipewire-audio pipewire-alsa pipewire-pulse wireplumber; do
   assert_grep "^${package}$" "$ROOT/config/packages/pi-desktop.packages" "Pi desktop manifest includes ${package}"
 done
+assert_grep '^raspi-config-git$' "$ROOT/config/packages/pi-desktop.packages" "Pi manifest includes raspi-config"
+assert_grep '^omarchy-settings$' "$ROOT/packages/aarch64-rebuild.txt" "Omarchy settings are rebuilt for aarch64"
+assert_grep 'required_packages=\(omarchy omarchy-keyring omarchy-settings\)' "$BA" "Omarchy settings are required before image assembly"
+assert_grep 'pkgbuilds/raspi-config' "$BA" "Pi configuration package is built separately"
+assert_grep 'required_packages\+=\(raspi-config-git\)' "$BA" "Pi configuration package is required before image assembly"
+assert_grep 'PARTITION_TABLE="\$\{PARTITION_TABLE:-\}"' "$BA" "image orchestration leaves the partition default to the builder"
+assert_grep 'PARTITION_TABLE="\$\{PARTITION_TABLE:-dos\}"' "$BI" "Pi image assembly defaults to MBR"
 assert_grep 'voxtype-install-invitation' "$RF" "Pi image suppresses the unverified Voxtype invitation"
 
 # A known default password plus SSH open is a login for anyone on the LAN.

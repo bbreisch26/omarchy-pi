@@ -6,7 +6,7 @@ Run [Omarchy](https://omarchy.org) on a Raspberry Pi 5, with an experimental Pi 
 > This repo now targets stable 4.0.5 and uses Omarchy's official aarch64
 > package channel. A 4.0.5 image also reached the desktop on a real Pi 4B;
 > audio worked after installing the three missing PipeWire packages and
-> rebooting. The rebuilt image includes them, pending fresh-card testing.
+> rebooting. A newer MBR image includes them and boots on a real Pi 4B.
 > See [docs/PORTING.md](docs/PORTING.md).
 
 ![Omarchy 4.0.1 running on aarch64](docs/images/omarchy-pi-vm.png)
@@ -15,7 +15,7 @@ Run [Omarchy](https://omarchy.org) on a Raspberry Pi 5, with an experimental Pi 
 
 ## Goal
 
-A ready-to-flash SD card image (`.img.xz`, flashable with Raspberry Pi Imager) that boots a Pi 4B or Pi 5 into Omarchy, tracking upstream stable releases with a minimal patch set.
+A ready-to-flash SD card image (`.img`, flashable with Raspberry Pi Imager) that boots a Pi 4B or Pi 5 into Omarchy, tracking upstream stable releases with a minimal patch set.
 
 ## How it's structured
 
@@ -23,7 +23,8 @@ A ready-to-flash SD card image (`.img.xz`, flashable with Raspberry Pi Imager) t
 |---|---|
 | **This repo** | Docs, image build tooling, Pi-specific configs, fast CI checks |
 | [`bbreisch26/omarchy`](https://github.com/bbreisch26/omarchy) (`pi5` branch) | Fork of `omacom/omarchy`: upstream stable tag + a few Pi/ARM patch commits, rebased on each upstream release |
-| aarch64 packages | The [official stable ARM repository](https://pkgs.omarchy.org/stable/aarch64/) supplies desktop packages; [pkgbuilds/](pkgbuilds/) holds the patched runtime recipe |
+| [`bbreisch26/raspi-config-alarm`](https://github.com/bbreisch26/raspi-config-alarm) (`arch-trixie` branch) | Raspberry Pi OS interface menu adapted to Arch Linux ARM; pinned package recipe in `pkgbuilds/raspi-config/` |
+| aarch64 packages | The [official stable ARM repository](https://pkgs.omarchy.org/stable/aarch64/) supplies desktop packages; [pkgbuilds/](pkgbuilds/) holds the patched runtime and pinned Pi configuration recipes |
 
 ## What works today
 

@@ -29,12 +29,13 @@ fi
 assert_grep 'Refusing to build' "$ROOT/scripts/build-pkgs.sh" \
   "build-pkgs.sh enforces the no-third-party-rebuild policy"
 
-# We only carry a patched PKGBUILD for Omarchy's own package.
+# Pi hardware tooling is built separately from Omarchy's package rebuild list.
 for d in "$ROOT"/pkgbuilds/*/; do
   [ -d "$d" ] || continue
   n=$(basename "$d")
   case "$n" in
     omarchy|omarchy-settings|omarchy-keyring) ok "local PKGBUILD '$n' is an Omarchy package" ;;
+    raspi-config) assert_grep '^_commit=[0-9a-f]{40}$' "$d/PKGBUILD" "raspi-config source is pinned" ;;
     *) bad "local PKGBUILD '$n' is an Omarchy package" \
            "third-party PKGBUILDs are out of scope -- document as unsupported instead" ;;
   esac

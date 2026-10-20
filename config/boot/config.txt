@@ -15,7 +15,8 @@ max_framebuffers=2
 disable_overscan=1
 disable_fw_kms_setup=1
 
-# Serial console on the GPIO header, so a failed boot is still diagnosable.
+# Keep the primary UART enabled for boot diagnostics; Pi 4 uses GPIO14/15,
+# while Pi 5 uses its dedicated debug header by default.
 enable_uart=1
 
 # --- NVMe / PCIe (Pi 5) ---
