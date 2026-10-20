@@ -36,9 +36,9 @@ Image assembly extracts and formats temporary files under `work/`, not Docker's
 overlay storage. On WSL, Windows C: still needs free space for Docker Desktop's
 disk image even when the Linux filesystem reports ample room.
 
-Use `VARIANT=pi` for Raspberry Pi firmware boot, including experimental Pi 4B
-testing. The firmware selects the board's V3D overlay; the MBR image has booted
-on a real Pi 4B, while application and GPIO coverage remain in progress.
+Use `VARIANT=pi` for Raspberry Pi 4B and 5 firmware boot. The firmware selects
+the board's V3D overlay. The MBR image has booted on a real Pi 4B, while
+application and GPIO coverage remain in progress.
 Pi images use MBR by default for the tested bootloader path; set
 `PARTITION_TABLE=gpt` only to compare a GPT image. `VARIANT=vm` builds the UEFI
 VM image used by `run-vm.sh` and `smoke-test.sh`.

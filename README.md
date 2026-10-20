@@ -1,12 +1,10 @@
 # omarchy-pi
 
-Run [Omarchy](https://omarchy.org) on a Raspberry Pi 5, with an experimental Pi 4B image path.
+Run [Omarchy](https://omarchy.org) on a Raspberry Pi 4B or 5.
 
-> **Status: alpha.** Omarchy 4.0.4 reached the desktop on a real Pi 5.
-> This repo now targets stable 4.0.5 and uses Omarchy's official aarch64
-> package channel. A 4.0.5 image also reached the desktop on a real Pi 4B;
-> audio worked after installing the three missing PipeWire packages and
-> rebooting. A newer MBR image includes them and boots on a real Pi 4B.
+> Omarchy 4.0.5 boots to the desktop on a real Pi 4B using the MBR image.
+> Omarchy 4.0.4 reached the desktop on a real Pi 5. The build uses Omarchy's
+> official aarch64 package channel and includes the Pi audio packages.
 > See [docs/PORTING.md](docs/PORTING.md).
 
 ![Omarchy 4.0.1 running on aarch64](docs/images/omarchy-pi-vm.png)
@@ -54,7 +52,7 @@ the `pi5` branch and [documented here](docs/PORTING.md#found-and-fixed-in-this-p
 
 ## Hardware target
 
-- Raspberry Pi 5, 8 GB; Raspberry Pi 4B, 4 GB+ is experimental
+- Raspberry Pi 4B, 4 GB+; Raspberry Pi 5, 8 GB
 - Board-appropriate official USB-C PSU and cooling
 - 32 GB+ microSD (A2-rated recommended) or NVMe HAT
 

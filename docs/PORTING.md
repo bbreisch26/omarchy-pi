@@ -148,5 +148,5 @@ Omarchy runtime updates.
 
 ## Non-goals
 
-- Supporting other SBCs; Pi 4B support is experimental pending hardware testing
+- Supporting other SBCs
 - Diverging from upstream behavior beyond what ARM/Pi strictly requires
